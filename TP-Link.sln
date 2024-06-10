@@ -1,0 +1,37 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.10.34928.147
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SMS_Sender", "SMS_Sender\SMS_Sender.csproj", "{FF473F78-89C9-4093-A88E-4BB50436844A}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TP-Link", "TP-Link\TP-Link.csproj", "{9C635456-50A0-4596-BCBB-86A1FC6BE426}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TP-LinkTest", "TP-LinkTest\TP-LinkTest.csproj", "{BAA76A99-5628-48C7-BC4A-581D41FFD47F}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{FF473F78-89C9-4093-A88E-4BB50436844A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FF473F78-89C9-4093-A88E-4BB50436844A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FF473F78-89C9-4093-A88E-4BB50436844A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FF473F78-89C9-4093-A88E-4BB50436844A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9C635456-50A0-4596-BCBB-86A1FC6BE426}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9C635456-50A0-4596-BCBB-86A1FC6BE426}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9C635456-50A0-4596-BCBB-86A1FC6BE426}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9C635456-50A0-4596-BCBB-86A1FC6BE426}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BAA76A99-5628-48C7-BC4A-581D41FFD47F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BAA76A99-5628-48C7-BC4A-581D41FFD47F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BAA76A99-5628-48C7-BC4A-581D41FFD47F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BAA76A99-5628-48C7-BC4A-581D41FFD47F}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {F1AEE9EE-B00B-409F-8F23-D89AB4E9E546}
+	EndGlobalSection
+EndGlobal
