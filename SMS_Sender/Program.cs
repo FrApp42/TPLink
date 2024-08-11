@@ -1,21 +1,22 @@
-﻿using TPLink;
-using TPLink.Models;
+﻿using FrApp42.TPLink;
+using FrApp42.TPLink.Models;
 
 internal class Program
 {
+    static Client client;
+
     static void Main(string[] args)
     {
         // See https://aka.ms/new-console-template for more information
 
-        
         Payload payloadSendSms = new Payload()
         {
             Method = TP_ACT.ACT_SET,
-            Controller = "TP_CONTROLLERS.LTE_SMS_SENDNEWMSG",
+            Controller = TP_CONTROLLERS.LTE_SMS_SENDNEWMSG.ToString(),
             Attrs = new Dictionary<string, object>
             {
                 { "index", 1 },
-                { "to", "" },
+                { "to", "0606060606" },
                 { "textContent", $"Hello {DateTime.Now}" },
             }
         };
@@ -23,11 +24,11 @@ internal class Program
         Payload payloadGetSendSmsResult = new Payload()
         {
             Method = TP_ACT.ACT_GET,
-            Controller = "TP_CONTROLLERS.LTE_SMS_SENDNEWMSG",
+            Controller = TP_CONTROLLERS.LTE_SMS_SENDNEWMSG.ToString(),
             Attrs = new Dictionary<string, object>
-    {
-        { "sendResult", null }
-    }
+            {
+                { "sendResult", null }
+            }
         };
 
         const string url = "http://192.168.1.1";
@@ -38,27 +39,37 @@ internal class Program
         {
             while (true)
             {
+                Console.WriteLine(string.Empty);
+                Console.WriteLine("Press Enter to send a new message");
+                Console.ReadLine();
+                client = new Client(url, username, password);
                 try
                 {
-                    Console.WriteLine(string.Empty);
-                    Console.WriteLine("Press Enter to send a new message");
-                    Console.ReadLine();
-
                     Console.WriteLine("Sending SMS");
-                    Client client = new Client(url, username, password);
-                    await client.Connect();
 
-                    Payload result = await client.Execute(payloadSendSms);
-                    VerifySubmission(result);
-
-                    Payload sentResult = await client.Execute(payloadGetSendSmsResult);
-                    VerifySubmissionResult(sentResult);
-
-                    await client.Disconnect();
+                    //Status result = await client.SendAsync("0606060606", $"Hello {DateTime.Now}");
+                    Status result = client.Send("0606060606", $"Hello {DateTime.Now}");
+                    switch (result)
+                    {
+                        case Status.SENT:
+                            Console.WriteLine("Great! SMS sent successfully");
+                            break;
+                        case Status.PROCESSING:
+                            Console.WriteLine("Warning: SMS sending was accepted but not yet processed.");
+                            break;
+                        case Status.ERROR:
+                        default:
+                            Console.WriteLine("Error: SMS could not be sent by router");
+                            break;
+                    }
                 }
                 catch (Exception ex)
                 {
                     Console.WriteLine(ex.ToString());
+                }
+                finally
+                {
+                    //await client.Disconnect();
                 }
                 
             }                    
@@ -76,20 +87,31 @@ internal class Program
         }
     }
 
-    static void VerifySubmissionResult(Payload result)
+    static void VerifySubmissionResult(ExtendedPayload result)
     {
-        switch (result.Error)
+        if(result.SendResult != null)
         {
-            case 0 when (int)result.Data[0].SendResult == 1:
-                Console.WriteLine("Great! SMS sent successfully");
-                break;
-            case 0 when (int)result.Data[0].SendResult == 3:
-                //TODO sendResult=3 means queued or processing ??
-                Console.WriteLine("Warning: SMS sending was accepted but not yet processed.");
-                break;
-            default:
-                Console.WriteLine("Error: SMS could not be sent by router");
-                break;
+            switch (result.Error)
+            {
+                case 0 when (int)result.SendResult == 1:
+                    Console.WriteLine("Great! SMS sent successfully");
+                    break;
+                case 0 when (int)result.SendResult == 3:
+                    //TODO sendResult=3 means queued or processing ??
+                    Console.WriteLine("Warning: SMS sending was accepted but not yet processed.");
+                    break;
+                default:
+                    Console.WriteLine("Error: SMS could not be sent by router");
+                    break;
+            }
+        }        
+    }
+
+    static void Dispose()
+    {
+        if (client.IsReady)
+        {
+            client.Disconnect();
         }
     }
 }

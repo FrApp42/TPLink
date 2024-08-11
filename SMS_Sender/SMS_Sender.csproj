@@ -6,6 +6,8 @@
     <RootNamespace>SMS_Sender</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <AssemblyVersion>1.0.0.128</AssemblyVersion>
+    <FileVersion>1.0.0.128</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>

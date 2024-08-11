@@ -7,7 +7,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SMS_Sender", "SMS_Sender\SM
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TP-Link", "TP-Link\TP-Link.csproj", "{9C635456-50A0-4596-BCBB-86A1FC6BE426}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TP-LinkTest", "TP-LinkTest\TP-LinkTest.csproj", "{BAA76A99-5628-48C7-BC4A-581D41FFD47F}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TP-Link.Test", "TP-Link.Test\TP-Link.Test.csproj", "{3D4BA412-24C2-4FB0-9D59-5FA3B3B38200}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -23,10 +23,10 @@ Global
 		{9C635456-50A0-4596-BCBB-86A1FC6BE426}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{9C635456-50A0-4596-BCBB-86A1FC6BE426}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{9C635456-50A0-4596-BCBB-86A1FC6BE426}.Release|Any CPU.Build.0 = Release|Any CPU
-		{BAA76A99-5628-48C7-BC4A-581D41FFD47F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{BAA76A99-5628-48C7-BC4A-581D41FFD47F}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{BAA76A99-5628-48C7-BC4A-581D41FFD47F}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{BAA76A99-5628-48C7-BC4A-581D41FFD47F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3D4BA412-24C2-4FB0-9D59-5FA3B3B38200}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3D4BA412-24C2-4FB0-9D59-5FA3B3B38200}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3D4BA412-24C2-4FB0-9D59-5FA3B3B38200}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3D4BA412-24C2-4FB0-9D59-5FA3B3B38200}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

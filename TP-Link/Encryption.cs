@@ -1,85 +1,57 @@
-﻿using System;
-using System.Numerics;
+﻿using System.Numerics;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace TPLink
+namespace FrApp42.TPLink
 {
-    using System;
-    using System.Numerics;
-    using System.Security.Cryptography;
-    using System.Text;
 
     internal class AES
     {
-        private string key;
-        private string iv;
+        private string _key;
+        private string _iv;
 
         public void GenKey()
         {
-            //using (var rng = new RNGCryptoServiceProvider())
-            //{
-            //    byte[] key = new byte[8];
-            //    byte[] iv = new byte[8];
-            //    rng.GetBytes(key);
-            //    rng.GetBytes(iv);
-            //    this.key = BitConverter.ToString(key).Replace("-", "").ToLower();
-            //    this.iv = BitConverter.ToString(iv).Replace("-", "").ToLower();
-            //}
-            //key = "be50a9322231102d";
-            //iv = "299c91800a685c10";
-            //byte[] vKey = RandomNumberGenerator.GetBytes(8);
-            //byte[] vIV = RandomNumberGenerator.GetBytes(8);
-
-            //key = BitConverter.ToString(vKey).Replace("-", "").ToLower();
-            //iv = BitConverter.ToString(vIV).Replace("-", "").ToLower();
-
             using (var rng = new RNGCryptoServiceProvider())
             {
                 byte[] keyBytes = new byte[8];
                 rng.GetBytes(keyBytes);
-                key = BitConverter.ToString(keyBytes).Replace("-", "").ToLower();
 
                 byte[] ivBytes = new byte[8];
                 rng.GetBytes(ivBytes);
-                iv = BitConverter.ToString(ivBytes).Replace("-", "").ToLower();
+
+                _key = BitConverter.ToString(keyBytes).Replace("-", "").ToLower();
+                _iv = BitConverter.ToString(ivBytes).Replace("-", "").ToLower();
             }
         }
 
         public void SetKey(string key, string iv)
         {
-            this.key = key;
-            this.iv = iv;
+            _key = key;
+            _iv = iv;
         }
 
         public string GetKeyString()
         {
-            return $"key={this.key}&iv={this.iv}";
+            return $"key={_key}&iv={_iv}";
         }
 
         public string Encrypt(string plainText)
         {
-            using (var aes = Aes.Create())
+            using (AesCryptoServiceProvider aes = new AesCryptoServiceProvider())
             {
-                aes.Key = Encoding.UTF8.GetBytes(this.key);
-                aes.IV = Encoding.UTF8.GetBytes(this.iv);
-                //aes.KeySize = 128;
+                aes.Key = Encoding.UTF8.GetBytes(_key);
+                aes.IV = Encoding.UTF8.GetBytes(_iv);
                 aes.Mode = CipherMode.CBC;
                 aes.Padding = PaddingMode.PKCS7;
 
-                var encryptor = aes.CreateEncryptor(aes.Key, aes.IV);
+                ICryptoTransform encryptor = aes.CreateEncryptor(aes.Key, aes.IV);
 
-                using (var msEncrypt = new MemoryStream())
-                {
-                    using (var csEncrypt = new CryptoStream(msEncrypt, encryptor, CryptoStreamMode.Write))
-                    {
-                        using (var swEncrypt = new StreamWriter(csEncrypt))
-                        {
-                            swEncrypt.Write(plainText);
-                        }
-                        return Convert.ToBase64String(msEncrypt.ToArray());
-                    }
-                }
+                byte[] plainBytes = Encoding.UTF8.GetBytes(plainText);
+                byte[] encryptedBytes = encryptor.TransformFinalBlock(plainBytes, 0, plainBytes.Length);
+
+                string result = Convert.ToBase64String(encryptedBytes);
+                return Convert.ToBase64String(encryptedBytes);
             }
         }
 
@@ -87,8 +59,8 @@ namespace TPLink
         {
             using (var aes = Aes.Create())
             {
-                aes.Key = Encoding.UTF8.GetBytes(this.key);
-                aes.IV = Encoding.UTF8.GetBytes(this.iv);
+                aes.Key = Encoding.UTF8.GetBytes(_key);
+                aes.IV = Encoding.UTF8.GetBytes(_iv);
                 //aes.KeySize = 128;
                 aes.Mode = CipherMode.CBC;
                 aes.Padding = PaddingMode.PKCS7;
@@ -111,10 +83,10 @@ namespace TPLink
 
     internal class RSAKey
     {
-        public BigInteger N { get; private set; } 
-        public int E { get; private set; } = 0;
+        private BigInteger _n;
+        private int _e = 0;
 
-        public BigInteger NoPadding(string message, int nLength)
+        private BigInteger NoPadding(string message, int nLength)
         {
             if (nLength < message.Length)
             {
@@ -132,41 +104,55 @@ namespace TPLink
                 }
                 else if (charCode > 127 && charCode < 2048)
                 {
-                    //byteArray[j++] = (byte)((charCode & 63) | 128);
-                    //byteArray[j++] = (byte)((charCode >> 6) | 192);
-                    byteArray[j++] = (byte)((charCode & 0x3F) | 0x80);
-                    byteArray[j++] = (byte)((charCode >> 6) | 0xC0);
+                    byteArray[j++] = (byte)((charCode & 63) | 128);
+                    byteArray[j++] = (byte)((charCode >> 6) | 192);
+                    //byteArray[j++] = (byte)((charCode & 0x3F) | 0x80);
+                    //byteArray[j++] = (byte)((charCode >> 6) | 0xC0);
                 }
                 else
                 {
-                    //byteArray[j++] = (byte)((charCode & 63) | 128);
-                    //byteArray[j++] = (byte)(((charCode >> 6) & 63) | 128);
-                    //byteArray[j++] = (byte)((charCode >> 12) | 224);
-                    byteArray[j++] = (byte)((charCode & 0x3F) | 0x80);
-                    byteArray[j++] = (byte)(((charCode >> 6) & 0x3F) | 0x80);
-                    byteArray[j++] = (byte)((charCode >> 12) | 0xE0);
+                    byteArray[j++] = (byte)((charCode & 63) | 128);
+                    byteArray[j++] = (byte)(((charCode >> 6) & 63) | 128);
+                    byteArray[j++] = (byte)((charCode >> 12) | 224);
+                    //byteArray[j++] = (byte)((charCode & 0x3F) | 0x80);
+                    //byteArray[j++] = (byte)(((charCode >> 6) & 0x3F) | 0x80);
+                    //byteArray[j++] = (byte)((charCode >> 12) | 0xE0);
                 }
             }
             while (j < nLength)
             {
                 byteArray[j++] = 0;
             }
-            return new BigInteger(byteArray);
+            BigInteger bg = new BigInteger(byteArray, isUnsigned: true, isBigEndian: true);
+            string bgStr = bg.ToString();
+
+            return new BigInteger(byteArray, isUnsigned: true, isBigEndian: true);
         }
 
-        public BigInteger DoPublic(BigInteger message)
+        private byte[] ConvertIntArrayToByteArray(int[] intArray)
         {
-            return BigInteger.ModPow(message, E,(BigInteger)N);
+            // Calculer la taille nécessaire pour le tableau de bytes
+            int byteCount = intArray.Length * sizeof(int);
+            byte[] byteArray = new byte[byteCount];
+
+            // Copier les valeurs des entiers dans le tableau de bytes
+            Buffer.BlockCopy(intArray, 0, byteArray, 0, byteCount);
+
+            return byteArray;
+        }
+
+        private BigInteger DoPublic(BigInteger message)
+        {
+            return BigInteger.ModPow(message, _e, _n);
         }
 
         public void SetPublic(string N, string E)
         {
             if (!string.IsNullOrEmpty(N) && !string.IsNullOrEmpty(E))
             {
-                //this.n = BigInteger.Parse(N, System.Globalization.NumberStyles.AllowHexSpecifier);
-                this.N = BigInteger.Parse(N, System.Globalization.NumberStyles.HexNumber);
-                //this.e = int.Parse(E, System.Globalization.NumberStyles.AllowHexSpecifier);
-                this.E = int.Parse(E, System.Globalization.NumberStyles.HexNumber);
+                // Unsigned BigInteger
+                _n = BigInteger.Parse("00" + N, System.Globalization.NumberStyles.HexNumber);
+                _e = int.Parse(E, System.Globalization.NumberStyles.HexNumber);
             }
             else
             {
@@ -176,23 +162,24 @@ namespace TPLink
 
         public string Encrypt(string text)
         {
-            //var m = NoPadding(text, (int)Math.Ceiling(BigInteger.Log((BigInteger)n, 2) + 7) >> 3);
-            //var absN = BigInteger.Abs(n.Value);
-            //var m = NoPadding(text, (int)Math.Ceiling(BigInteger.Log(absN, 2) + 7) >> 3);            
-            BigInteger message = NoPadding(text, ((int)N.GetBitLength() + 7) >> 3);
+            BigInteger message = NoPadding(text, ((int)_n.GetBitLength() + 7) >> 3);
             if (message == null)
             {
                 return null;
             }
-            var cipher = DoPublic(message);
+            BigInteger cipher = DoPublic(message);
             if (cipher == null)
             {
                 return null;
             }
-            
+
             string hexString = cipher.ToString("X");
-            //return (h.Length & 1) == 0 ? h : "0" + h;
-            return hexString.Length % 2 == 0 ? hexString : $"0{hexString}";
+            if (hexString.Substring(0, 1) == "0")
+            {
+                hexString = hexString.Substring(1);
+            }
+            hexString = hexString.ToLower();
+            return (hexString.Length & 1) == 0 ? hexString : "0" + hexString;
         }
     }
 
@@ -206,7 +193,7 @@ namespace TPLink
             rsaKey.SetPublic(n, e);
         }
 
-        public string CalculateRsaChunk(RSAKey rsaKey, string val, int strEnlen)
+        private string CalculateRsaChunk(RSAKey rsaKey, string val, int strEnlen)
         {
             string result = rsaKey.Encrypt(val);
             if (result.Length != strEnlen)
@@ -220,12 +207,16 @@ namespace TPLink
             return result;
         }
 
-        public string CalculateRsaChunk(string val, int strEnlen)
+        private string CalculateRsaChunk(string val, int strEnlen)
         {
             string result = rsaKey.Encrypt(val);
             if (result.Length != strEnlen)
             {
-                result = string.Concat(Enumerable.Repeat("0", Math.Abs(strEnlen - result.Length))) + result;
+                decimal l = Math.Abs(strEnlen - result.Length);
+                for (int i = 0; i < l; i++)
+                {
+                    result = "0" + result;
+                }
             }
             return result;
         }
@@ -243,7 +234,7 @@ namespace TPLink
 
             while (start < plainText.Length)
             {
-                end = Math.Min(end, plainText.Length);
+                end = end < plainText.Length ? end : plainText.Length;
                 buffer += CalculateRsaChunk(plainText.Substring(start, end - start), STR_EN_LEN);
                 start += step;
                 end += step;
@@ -302,6 +293,10 @@ namespace TPLink
         public string GetSignature(string seq, bool isLogin)
         {
             string s = isLogin ? this.aesKeyString + "&" : "";
+            if (string.IsNullOrEmpty(this.hash))
+            {
+                this.hash = "undefined";
+            }
             s += "h=" + this.hash + "&s=" + seq ?? this.seq.ToString();
             return this.rsa.Encrypt(s);
         }

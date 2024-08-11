@@ -1,4 +1,4 @@
-﻿namespace TPLink
+﻿namespace FrApp42.TPLink
 {
     public enum TP_CONTROLLERS
     {
