@@ -5,24 +5,29 @@
     <RootNamespace>FrApp42.TPLink</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <AssemblyVersion>1.0.0.120</AssemblyVersion>
-    <FileVersion>1.0.0.120</FileVersion>
+    <AssemblyVersion>1.0.0.122</AssemblyVersion>
+    <FileVersion>1.0.0.122</FileVersion>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     <PackageId>$(AssemblyName)</PackageId>
     <Title>TP-Link</Title>
     <AssemblyName>FrApp42.$(MSBuildProjectName)</AssemblyName>
     <Company>FrApp42</Company>
     <Description>Unofficial TPLink library to send SMS throught Archer MR600 routeur</Description>
-    <Copyright>Apache License 2.0</Copyright>
+    <Copyright>GPL-3.0</Copyright>
     <PackageProjectUrl>https://github.com/FrApp42/TPLink</PackageProjectUrl>
     <RepositoryUrl>https://github.com/FrApp42/TPLink.git</RepositoryUrl>
-    <PackageTags>TPLink;sms;Archer;MR600</PackageTags>
-    <PackageReleaseNotes>Initial working lib</PackageReleaseNotes>
+    <PackageTags>TPLink;TP-Link;sms;Archer;MR600</PackageTags>
+    <PackageReleaseNotes>First release</PackageReleaseNotes>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageIcon>Icone Inversed.png</PackageIcon>
+    <PackageLicenseFile>LICENSE.MD</PackageLicenseFile>
   </PropertyGroup>
 
   <ItemGroup>
+    <None Include="..\LICENSE.MD">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
     <None Include="..\README.md">
       <Pack>True</Pack>
       <PackagePath>\</PackagePath>
