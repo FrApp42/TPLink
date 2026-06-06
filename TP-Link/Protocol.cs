@@ -1,230 +1,286 @@
-﻿using System.Text.RegularExpressions;
+﻿using System.Globalization;
+using System.Text;
+using System.Text.RegularExpressions;
 using FrApp42.TPLink.Models;
 
 namespace FrApp42.TPLink
 {
     internal class Protocol
     {
-        public string MakeDataFrame(Payload payload)
+        private static readonly Regex ObjectHeaderExtractor = new(@"^\[\d+,\d+,\d+,\d+,\d+,\d+\]\d+"); // ex [0,0,0,0,0,0]0
+        private static readonly Regex ObjectAttributeExtractor = new(@"^([a-zA-Z0-9_]+)=(.*)$");      // ex totalNumber=11
+        private static readonly Regex FrameErrorExtractor = new(@"^\[error\](-?\d+)$");                // ex [error]0
+
+        #region Encode
+
+        /// <summary>
+        /// Builds a data frame for one or several payloads.
+        /// Multi-payload frames are required to combine a cursor reset with a list read,
+        /// the same way the original bridge does.
+        /// </summary>
+        public string MakeDataFrame(params Payload[] payloads)
         {
-            string attrs = ToKv(payload.Attrs);
+            if (payloads == null || payloads.Length == 0)
+                throw new ArgumentException("At least one payload is required", nameof(payloads));
 
-            int nbrAtts = attrs != null && Regex.Matches(attrs, @"\r\n").Count > 0 ? Regex.Matches(attrs, @"\r\n").Count : 0;
+            string header = string.Join("&", payloads.Select(p => ((int)p.Method).ToString()));
 
-            var header = (int)payload.Method;
-            var data = "[" + payload.Controller + "#" + (payload.Stack ?? "0,0,0,0,0,0") + "#" + "0,0,0,0,0,0" + "]" + "0," + nbrAtts + "\r\n" + attrs;
+            StringBuilder data = new();
+            for (int index = 0; index < payloads.Length; index++)
+            {
+                Payload payload = payloads[index];
+                string attrs = ToKv(payload.Attrs);
+                int nbAttrs = string.IsNullOrEmpty(attrs) ? 0 : Regex.Matches(attrs, @"\r\n").Count;
+                string stack = string.IsNullOrEmpty(payload.Stack) ? "0,0,0,0,0,0" : payload.Stack;
 
-            return header + "\r\n" + data;
+                data.Append('[').Append(payload.Controller).Append('#').Append(stack)
+                    .Append('#').Append("0,0,0,0,0,0").Append(']')
+                    .Append(index).Append(',').Append(nbAttrs).Append("\r\n")
+                    .Append(attrs);
+            }
+
+            return header + "\r\n" + data.ToString();
         }
 
-        public Payload FromDataFrame(string dataFrame)
+        #endregion
+
+        #region Decode
+
+        /// <summary>
+        /// Parses a decrypted data frame into an error code and a list of raw attribute objects.
+        /// </summary>
+        public ParsedResponse ParseResponse(string dataFrame)
         {
-            string[] lines = dataFrame.Trim().Split("\n");
-            int error = 0;
+            ParsedResponse response = new();
+            if (string.IsNullOrEmpty(dataFrame))
+                return response;
 
-            Payload payload = new Payload();
+            string[] lines = dataFrame.Replace("\r\n", "\n").Trim().Split('\n');
+            Dictionary<string, string>? current = null;
 
-            Regex objectHeaderExtractor = new Regex(@"\[\d,\d,\d,\d,\d,\d\]\d"); // ex [0,0,0,0,0,0]0
-            Regex objectAttributeExtractor = new Regex(@"^([a-zA-Z0-9]+)=(.*)$"); // ex totalNumber=11
-            Regex frameErrorExtractor = new Regex(@"^\[error\](\d+)$"); // ex [error]0
-
-            DataObject currentObject = null;
-            List<DataObject> data = new List<DataObject>();
             foreach (string line in lines)
             {
-                Match matching = objectHeaderExtractor.Match(line);
-                // found header
-                if (matching.Success)
+                // found object header
+                if (ObjectHeaderExtractor.IsMatch(line))
                 {
-                    if (currentObject != null)
-                    {
-                        data.Add(currentObject);
-                    }
-                    currentObject = new DataObject();
+                    if (current != null)
+                        response.Data.Add(current);
+
+                    current = new Dictionary<string, string>();
                     continue;
                 }
 
-                matching = frameErrorExtractor.Match(line);
-                // found error code
-                if (matching.Success)
+                // found error code (terminates the last object)
+                Match errorMatch = FrameErrorExtractor.Match(line);
+                if (errorMatch.Success)
                 {
-                    error = int.Parse(matching.Groups[1].Value);
-                    if (currentObject != null)
+                    response.Error = int.Parse(errorMatch.Groups[1].Value, CultureInfo.InvariantCulture);
+                    if (current != null)
                     {
-                        data.Add(currentObject);
+                        response.Data.Add(current);
+                        current = null;
                     }
                     continue;
                 }
 
                 // found attribute
-                matching = objectAttributeExtractor.Match(line);
-                if (matching.Success)
-                {
-                    string propertyName = matching.Groups[1].Value;
-                    string propertyValue = matching.Groups[2].Value;
-                    switch (propertyName)
-                    {
-                        case "sendResult":
-                            currentObject.SendResult = Convert.ToInt32(propertyValue);
-                            break;
-                        case "sendTime":
-                            break;
-                        case "unread":
-                            break;
-                        case "receivedTime":
-                            break;
-                        case "from":
-                            currentObject.From = propertyValue;
-                            break;
-                        case "content":
-                            break;
-                    }
+                Match attrMatch = ObjectAttributeExtractor.Match(line);
+                if (attrMatch.Success && current != null)
+                    current[attrMatch.Groups[1].Value] = attrMatch.Groups[2].Value;
+            }
+
+            if (current != null)
+                response.Data.Add(current);
+
+            return response;
+        }
+
+        /// <summary>
+        /// Maps a parsed response to a list of received SMS (inbox).
+        /// </summary>
+        public List<InboxSms> MapInbox(ParsedResponse response)
+        {
+            List<InboxSms> messages = new();
+            int order = 1;
+
+            foreach (Dictionary<string, string> entry in response.Data)
+            {
+                if (!entry.ContainsKey("index"))
                     continue;
+
+                messages.Add(new InboxSms
+                {
+                    Index = GetInt(entry, "index"),
+                    From = GetString(entry, "from"),
+                    Content = Unescape(GetString(entry, "content")),
+                    ReceivedTime = GetDate(entry, "receivedTime"),
+                    Unread = GetInt(entry, "unread") > 0,
+                    Order = order++
+                });
+            }
+
+            return messages;
+        }
+
+        /// <summary>
+        /// Maps a parsed response to a list of sent SMS (outbox).
+        /// </summary>
+        public List<OutboxSms> MapOutbox(ParsedResponse response)
+        {
+            List<OutboxSms> messages = new();
+            int order = 1;
+
+            foreach (Dictionary<string, string> entry in response.Data)
+            {
+                if (!entry.ContainsKey("index"))
+                    continue;
+
+                messages.Add(new OutboxSms
+                {
+                    Index = GetInt(entry, "index"),
+                    To = GetString(entry, "to"),
+                    Content = Unescape(GetString(entry, "content")),
+                    SendTime = GetDate(entry, "sendTime"),
+                    Order = order++
+                });
+            }
+
+            return messages;
+        }
+
+        /// <summary>
+        /// Extracts the sendResult value from a parsed response, if present.
+        /// </summary>
+        public int? GetSendResult(ParsedResponse response)
+        {
+            foreach (Dictionary<string, string> entry in response.Data)
+            {
+                if (entry.TryGetValue("sendResult", out string? value) &&
+                    int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsed))
+                {
+                    return parsed;
                 }
-            }
-
-            return new Payload
-            {
-                Error = error,
-                Data = data,
-            };
-        }
-
-        public ExtendedPayload ExtendedFromDataFrame(string dataFrame)
-        {
-            string stack = FindHeaderString(dataFrame, new Regex(@"\[(.*?)\]"), 1);
-
-            ExtendedPayload payload = new ExtendedPayload()
-            {
-                Error = FindHeader<int>(dataFrame, new Regex(@"\[error\](\d+)"), 1),
-                Stack = !string.IsNullOrEmpty(stack) ? stack : null,
-                SendResult = FindValue<int>(dataFrame, "sendResult")
-            };
-            return payload;
-        }
-
-        private T? FindHeader<T>(string text, Regex regex, int group) where T : struct
-        {
-            Match match = regex.Match(text);
-            if (match.Success)
-            {
-                string value = match.Groups[group].Value;
-                return typeof(T) switch
-                {
-                    Type t when t == typeof(string) => (T)(object)value.ToString(),
-                    Type t when t == typeof(int) => (T)(object)int.Parse(value),
-                    Type t when t == typeof(DateTime) => (T)(object)DateTime.Parse(value),
-                    // Ajoutez d'autres types de conversion si nécessaire
-                    _ => throw new InvalidOperationException("Type non supporté")
-                };
-            }
-            return null;
-        }
-
-        private string FindHeaderString(string text, Regex regex, int group)
-        {
-            Match match = regex.Match(text);
-            if (match.Success)
-            {
-                return match.Groups[group].Value;
-            }
-            return string.Empty;
-        }
-
-        private T? FindValue<T>(string text, string fieldName, string pattern = null) where T : struct
-        {
-            if (string.IsNullOrEmpty(pattern))
-            {
-                pattern = $@"{fieldName}=(.+)";
-            }
-            Regex regex = new Regex(pattern);
-            Match match = regex.Match(text);
-            if (match.Success)
-            {
-                string value = match.Groups[1].Value;
-                return typeof(T) switch
-                {
-                    Type t when t == typeof(string) => (T)(object)value.ToString(),
-                    Type t when t == typeof(int) => (T)(object)int.Parse(value),
-                    Type t when t == typeof(DateTime) => (T)(object)DateTime.Parse(value),
-                    // Ajoutez d'autres types de conversion si nécessaire
-                    _ => throw new InvalidOperationException("Type non supporté")
-                };
             }
 
             return null;
         }
 
-        public Payload PrettifyResponsePayload(Payload payload)
+        /// <summary>
+        /// Flattens a parsed response into an <see cref="ExtendedPayload"/> (backward-compatibility helper).
+        /// </summary>
+        public ExtendedPayload ToExtendedPayload(ParsedResponse response)
         {
-            payload.Error = int.Parse(payload.Error.ToString());
-            foreach (DataObject dataObject in payload.Data)
+            ExtendedPayload payload = new()
             {
-                dataObject.Index = int.Parse(dataObject.Index.ToString());
-                dataObject.SendResult = int.Parse(dataObject.SendResult.ToString());
-                dataObject.Unread = int.Parse(dataObject.Unread.ToString()) > 0;
-                dataObject.ReceivedTime = DateTime.Parse(dataObject.ReceivedTime.ToString());
-                dataObject.SendTime = DateTime.Parse(dataObject.SendTime.ToString());
-                dataObject.Content = dataObject.Content.Replace("\u0012", "\n");
+                Error = response.Error,
+                SendResult = GetSendResult(response)
+            };
+
+            Dictionary<string, string>? first = response.Data.FirstOrDefault(d => d.Count > 0);
+            if (first != null)
+            {
+                if (first.ContainsKey("index"))
+                    payload.Index = GetInt(first, "index");
+
+                payload.To = GetString(first, "to");
+                payload.From = GetString(first, "from");
+                payload.Content = Unescape(GetString(first, "content"));
+
+                if (first.TryGetValue("sendTime", out string? sendTime))
+                    payload.SendTime = sendTime;
             }
+
             return payload;
         }
 
-        private string ObjectToKv(object obj, string keyValueSeparator, string lineSeparator)
+        #endregion
+
+        #region Decode helpers
+
+        private static string? GetString(Dictionary<string, string> entry, string key)
+            => entry.TryGetValue(key, out string? value) ? value : null;
+
+        private static int GetInt(Dictionary<string, string> entry, string key)
+            => entry.TryGetValue(key, out string? value) &&
+               int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsed)
+                ? parsed
+                : 0;
+
+        private static DateTime GetDate(Dictionary<string, string> entry, string key)
         {
-            string ret = "";
-            foreach (var prop in obj.GetType().GetProperties())
-            {
-                if (prop.GetValue(obj, null) != null || prop.GetValue(obj, null).ToString() == "0" || prop.GetValue(obj, null).ToString() == "")
-                {
-                    var value = prop.PropertyType == typeof(string) ? Regex.Replace(prop.GetValue(obj, null).ToString(), @"(\r\n|\n|\r)", "\u0012") : prop.GetValue(obj, null);
-                    ret += prop.Name + keyValueSeparator + value + lineSeparator;
-                }
-                else
-                {
-                    ret += prop.Name + lineSeparator;
-                }
-            }
-            return ret;
+            if (!entry.TryGetValue(key, out string? value) || string.IsNullOrWhiteSpace(value))
+                return default;
+
+            if (DateTime.TryParseExact(value, "yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime exact))
+                return exact;
+
+            return DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime parsed)
+                ? parsed
+                : default;
         }
 
-        private string ToKv(object data, string keyValueSeparator = "=", string lineSeparator = "\r\n")
+        private static string? Unescape(string? content)
+            => content?.Replace("\u0012", "\n");
+
+        #endregion
+
+        #region Key/Value encoding
+
+        private string ToKv(object? data, string keyValueSeparator = "=", string lineSeparator = "\r\n")
         {
             if (data == null)
-            {
-                return "";
-            }
+                return string.Empty;
 
-            if (data.GetType() == typeof(string))
-            {
-                return data.ToString();
-            }
+            if (data is string text)
+                return text;
 
-            if (data.GetType() == typeof(List<object>))
+            if (data is Dictionary<string, object> dict)
             {
-                return string.Join(lineSeparator, (List<object>)data) + lineSeparator;
-            }
-            if (data.GetType() == typeof(Dictionary<string, object>))
-            {
-                string ret = "";
-                foreach (KeyValuePair<string, object> kvp in (Dictionary<string, object>)data)
+                StringBuilder ret = new();
+                foreach (KeyValuePair<string, object> kvp in dict)
                 {
-                    string value = string.Empty;
                     if (kvp.Value != null)
                     {
-                        value = (kvp.Value.GetType() == typeof(string)) ? kvp.Value.ToString().Replace("\r\n", "\u0012").Replace("\n", "\u0012").Replace("\r", "\u0012") : kvp.Value.ToString();
-                        ret += kvp.Key + keyValueSeparator + value + lineSeparator;
+                        string value = kvp.Value is string str
+                            ? str.Replace("\r\n", "\u0012").Replace("\n", "\u0012").Replace("\r", "\u0012")
+                            : kvp.Value.ToString() ?? string.Empty;
+
+                        ret.Append(kvp.Key).Append(keyValueSeparator).Append(value).Append(lineSeparator);
                     }
                     else
                     {
-                        ret += kvp.Key + lineSeparator;
+                        // attribute name only (used by list reads, ex: ACT_GL)
+                        ret.Append(kvp.Key).Append(lineSeparator);
                     }
                 }
-                return ret;
+                return ret.ToString();
             }
 
             return ObjectToKv(data, keyValueSeparator, lineSeparator);
         }
-    }
 
+        private string ObjectToKv(object obj, string keyValueSeparator, string lineSeparator)
+        {
+            StringBuilder ret = new();
+            foreach (var prop in obj.GetType().GetProperties())
+            {
+                object? value = prop.GetValue(obj, null);
+                if (value != null)
+                {
+                    string formatted = value is string str
+                        ? Regex.Replace(str, @"(\r\n|\n|\r)", "\u0012")
+                        : value.ToString() ?? string.Empty;
+
+                    ret.Append(prop.Name).Append(keyValueSeparator).Append(formatted).Append(lineSeparator);
+                }
+                else
+                {
+                    ret.Append(prop.Name).Append(lineSeparator);
+                }
+            }
+            return ret.ToString();
+        }
+
+        #endregion
+    }
 }

@@ -217,29 +217,72 @@ namespace FrApp42.TPLink
 
         #endregion
 
-        #region Send       
+        #region Send
 
         /// <summary>
-        /// Send SMS
+        /// Send an SMS to one or several recipients.
+        /// </summary>
+        /// <param name="sms">SMS object holding the recipients and the message.</param>
+        /// <returns>One <see cref="SmsSendResult"/> per recipient.</returns>
+        public async Task<List<SmsSendResult>> SendAsync(SmsToSend sms)
+        {
+            if (sms is null)
+                throw new ArgumentNullException(nameof(sms));
+
+            if (sms.Recipients is null || sms.Recipients.Count == 0)
+                throw new ArgumentException("At least one recipient is required.", nameof(sms));
+
+            List<SmsSendResult> results = new();
+            foreach (string recipient in sms.Recipients)
+            {
+                Status status = await SendSingleAsync(recipient, sms.Message);
+                results.Add(new SmsSendResult { Recipient = recipient, Status = status });
+            }
+
+            return results;
+        }
+
+        /// <summary>
+        /// Send an SMS to one or several recipients (synchronous).
+        /// </summary>
+        /// <param name="sms">SMS object holding the recipients and the message.</param>
+        /// <returns>One <see cref="SmsSendResult"/> per recipient.</returns>
+        public List<SmsSendResult> Send(SmsToSend sms)
+            => SendAsync(sms).GetAwaiter().GetResult();
+
+        /// <summary>
+        /// Send an SMS to a single recipient.
         /// </summary>
         /// <param name="to">Phone number</param>
         /// <param name="message">Message</param>
         /// <returns>Return Status</returns>
         public Status Send(string to, string message)
+            => SendSingleAsync(to, message).GetAwaiter().GetResult();
+
+        /// <summary>
+        /// Send an SMS to a single recipient (async).
+        /// </summary>
+        /// <param name="to">Phone number</param>
+        /// <param name="message">Message</param>
+        /// <returns>Return Status</returns>
+        public Task<Status> SendAsync(string to, string message)
+            => SendSingleAsync(to, message);
+
+        private async Task<Status> SendSingleAsync(string to, string message)
         {
-            Payload payloadSendSms = new Payload()
+            Payload payloadSendSms = new()
             {
                 Method = TP_ACT.ACT_SET,
                 Controller = TP_CONTROLLERS.LTE_SMS_SENDNEWMSG.ToString(),
                 Attrs = new Dictionary<string, object>
-            {
-                { "index", 1 },
-                { "to", $"{to}" },
-                { "textContent", $"{message}" },
-            }
+                {
+                    { "index", 1 },
+                    { "to", to },
+                    { "textContent", message },
+                }
             };
 
-            Payload payloadGetSendSmsResult = new Payload()
+            Payload payloadGetSendSmsResult = new()
             {
                 Method = TP_ACT.ACT_GET,
                 Controller = TP_CONTROLLERS.LTE_SMS_SENDNEWMSG.ToString(),
@@ -249,83 +292,226 @@ namespace FrApp42.TPLink
                 }
             };
 
-            ExtendedPayload sendResult = Execute(payloadSendSms).GetAwaiter().GetResult();
-            ExtendedPayload sentResult = Execute(payloadGetSendSmsResult).GetAwaiter().GetResult();
+            ParsedResponse sendResult = await ExecuteRaw(true, payloadSendSms);
+            ParsedResponse sentResult = await ExecuteRaw(true, payloadGetSendSmsResult);
+
             return GetStatus(sendResult, sentResult);
         }
 
-        /// <summary>
-        /// Send SMS Async
-        /// </summary>
-        /// <param name="to">Phone number</param>
-        /// <param name="message">Message</param>
-        /// <returns>Return Status</returns>
-        public async Task<Status> SendAsync(string to, string message)
+        private Status GetStatus(ParsedResponse send, ParsedResponse sent)
         {
+            if (send.Error != 0 || sent.Error != 0)
+                return Status.ERROR;
 
-            Payload payloadSendSms = new Payload()
+            int? sendResult = _protocol.GetSendResult(sent);
+            return sendResult switch
+            {
+                1 => Status.SENT,
+                3 => Status.PROCESSING,
+                _ => Status.ERROR
+            };
+        }
+
+        #endregion
+
+        #region Read
+
+        /// <summary>
+        /// Read received SMS (inbox). The router only exposes the last messages it kept.
+        /// </summary>
+        /// <param name="unreadOnly">null = all messages, true = only unread, false = only read.</param>
+        /// <returns>List of <see cref="InboxSms"/>.</returns>
+        public async Task<List<InboxSms>> GetInboxAsync(bool? unreadOnly = null)
+        {
+            Payload resetCursor = new()
             {
                 Method = TP_ACT.ACT_SET,
-                Controller = TP_CONTROLLERS.LTE_SMS_SENDNEWMSG.ToString(),
-                Attrs = new Dictionary<string, object>
-            {
-                { "index", 1 },
-                { "to", $"{to}" },
-                { "textContent", $"{message}" },
-            }
+                Controller = TP_CONTROLLERS.LTE_SMS_RECVMSGBOX.ToString(),
+                Attrs = new Dictionary<string, object> { { "PageNumber", 1 } }
             };
 
-            Payload payloadGetSendSmsResult = new Payload()
+            Payload listEntries = new()
             {
-                Method = TP_ACT.ACT_GET,
-                Controller = TP_CONTROLLERS.LTE_SMS_SENDNEWMSG.ToString(),
-                Attrs = new Dictionary<string, object>
-            {
-                { "sendResult", null }
-            }
+                Method = TP_ACT.ACT_GL,
+                Controller = TP_CONTROLLERS.LTE_SMS_RECVMSGENTRY.ToString(),
+                Attrs = AttributeNames("index", "from", "content", "receivedTime", "unread")
             };
 
-            ExtendedPayload sendResult = await Execute(payloadSendSms);
-            ExtendedPayload sentResult = await Execute(payloadGetSendSmsResult);
+            ParsedResponse response = await ExecuteRaw(true, resetCursor, listEntries);
+            List<InboxSms> messages = _protocol.MapInbox(response);
 
-            return GetStatus(sendResult, sentResult);
-        }
+            if (unreadOnly.HasValue)
+                messages = messages.Where(m => m.Unread == unreadOnly.Value).ToList();
 
-        private Status GetStatus(ExtendedPayload send, ExtendedPayload sent)
-        {
-            if (send.Error == 0 && sent.Error == 0)
-            {
-                if (sent.SendResult == null)
-                {
-                    return Status.ERROR;
-                }
-
-                switch (sent.SendResult)
-                {
-                    case 1:
-                        return Status.SENT;
-                    case 3:
-                        return Status.PROCESSING;
-                    default:
-                        throw new Exception("Uncategorized status");
-                }
-            }
-
-            return Status.ERROR;
+            return messages;
         }
 
         /// <summary>
-        /// Send custom Payload
+        /// Read received SMS (inbox), synchronous.
+        /// </summary>
+        /// <param name="unreadOnly">null = all messages, true = only unread, false = only read.</param>
+        /// <returns>List of <see cref="InboxSms"/>.</returns>
+        public List<InboxSms> GetInbox(bool? unreadOnly = null)
+            => GetInboxAsync(unreadOnly).GetAwaiter().GetResult();
+
+        /// <summary>
+        /// Read only the unread received SMS using the dedicated router endpoint.
+        /// </summary>
+        /// <returns>List of unread <see cref="InboxSms"/>.</returns>
+        public async Task<List<InboxSms>> GetUnreadAsync()
+        {
+            Payload resetCursor = new()
+            {
+                Method = TP_ACT.ACT_SET,
+                Controller = TP_CONTROLLERS.LTE_SMS_RECVMSGBOX.ToString(),
+                Attrs = new Dictionary<string, object> { { "PageNumber", 1 } }
+            };
+
+            Payload listEntries = new()
+            {
+                Method = TP_ACT.ACT_GL,
+                Controller = TP_CONTROLLERS.LTE_SMS_UNREADMSGENTRY.ToString(),
+                Attrs = AttributeNames("index", "from", "content", "receivedTime", "unread")
+            };
+
+            ParsedResponse response = await ExecuteRaw(true, resetCursor, listEntries);
+            return _protocol.MapInbox(response);
+        }
+
+        /// <summary>
+        /// Read only the unread received SMS, synchronous.
+        /// </summary>
+        /// <returns>List of unread <see cref="InboxSms"/>.</returns>
+        public List<InboxSms> GetUnread()
+            => GetUnreadAsync().GetAwaiter().GetResult();
+
+        /// <summary>
+        /// Read sent SMS (outbox). The router only exposes the last messages it kept.
+        /// </summary>
+        /// <returns>List of <see cref="OutboxSms"/>.</returns>
+        public async Task<List<OutboxSms>> GetOutboxAsync()
+        {
+            Payload resetCursor = new()
+            {
+                Method = TP_ACT.ACT_SET,
+                Controller = TP_CONTROLLERS.LTE_SMS_SENDMSGBOX.ToString(),
+                Attrs = new Dictionary<string, object> { { "PageNumber", 1 } }
+            };
+
+            Payload listEntries = new()
+            {
+                Method = TP_ACT.ACT_GL,
+                Controller = TP_CONTROLLERS.LTE_SMS_SENDMSGENTRY.ToString(),
+                Attrs = AttributeNames("index", "to", "content", "sendTime")
+            };
+
+            ParsedResponse response = await ExecuteRaw(true, resetCursor, listEntries);
+            return _protocol.MapOutbox(response);
+        }
+
+        /// <summary>
+        /// Read sent SMS (outbox), synchronous.
+        /// </summary>
+        /// <returns>List of <see cref="OutboxSms"/>.</returns>
+        public List<OutboxSms> GetOutbox()
+            => GetOutboxAsync().GetAwaiter().GetResult();
+
+        private static Dictionary<string, object> AttributeNames(params string[] names)
+        {
+            Dictionary<string, object> attrs = new();
+            foreach (string name in names)
+                attrs[name] = null;
+
+            return attrs;
+        }
+
+        #endregion
+
+        #region Manage
+
+        /// <summary>
+        /// Mark a received SMS as read.
+        /// </summary>
+        /// <param name="order">
+        /// 1-based position (<see cref="InboxSms.Order"/>) returned by <see cref="GetInboxAsync"/>,
+        /// not the SMS index. Must be called right after an unfiltered inbox read.
+        /// </param>
+        /// <returns>True if the router accepted the operation.</returns>
+        public async Task<bool> MarkAsReadAsync(int order)
+        {
+            Payload payload = new()
+            {
+                Method = TP_ACT.ACT_SET,
+                Controller = TP_CONTROLLERS.LTE_SMS_RECVMSGENTRY.ToString(),
+                Stack = $"{order},0,0,0,0,0",
+                Attrs = new Dictionary<string, object> { { "unread", 0 } }
+            };
+
+            ParsedResponse response = await ExecuteRaw(true, payload);
+            return response.Error == 0;
+        }
+
+        /// <summary>
+        /// Delete a received SMS by its 1-based position (<see cref="InboxSms.Order"/>).
+        /// Must be called right after an inbox read.
+        /// </summary>
+        /// <param name="order">1-based position of the SMS in the inbox read.</param>
+        /// <returns>True if the router accepted the operation.</returns>
+        public Task<bool> DeleteInboxAsync(int order)
+            => DeleteAsync(TP_CONTROLLERS.LTE_SMS_RECVMSGENTRY, order);
+
+        /// <summary>
+        /// Delete a sent SMS by its 1-based position (<see cref="OutboxSms.Order"/>).
+        /// Must be called right after an outbox read.
+        /// </summary>
+        /// <param name="order">1-based position of the SMS in the outbox read.</param>
+        /// <returns>True if the router accepted the operation.</returns>
+        public Task<bool> DeleteOutboxAsync(int order)
+            => DeleteAsync(TP_CONTROLLERS.LTE_SMS_SENDMSGENTRY, order);
+
+        private async Task<bool> DeleteAsync(TP_CONTROLLERS controller, int order)
+        {
+            Payload payload = new()
+            {
+                Method = TP_ACT.ACT_DEL,
+                Controller = controller.ToString(),
+                Stack = $"{order},0,0,0,0,0",
+                Attrs = new Dictionary<string, object>()
+            };
+
+            ParsedResponse response = await ExecuteRaw(true, payload);
+            return response.Error == 0;
+        }
+
+        #endregion
+
+        #region Execute
+
+        /// <summary>
+        /// Send a custom payload and get a flattened <see cref="ExtendedPayload"/> back.
+        /// Kept for backward compatibility; prefer the typed SMS methods.
         /// </summary>
         /// <param name="payload">Payload to send</param>
         /// <param name="AllowReconnectionOnError">Try reconnection on error</param>
         /// <returns>Return ExtendedPayload</returns>
         public async Task<ExtendedPayload> Execute(Payload payload, bool AllowReconnectionOnError = true)
         {
+            ParsedResponse response = await ExecuteRaw(AllowReconnectionOnError, payload);
+            ExtendedPayload extended = _protocol.ToExtendedPayload(response);
+            extended.Method = payload.Method;
+            extended.Controller = payload.Controller;
+            return extended;
+        }
+
+        /// <summary>
+        /// Core execution: encrypt one or several payloads, post them and parse the response.
+        /// </summary>
+        private async Task<ParsedResponse> ExecuteRaw(bool allowReconnectionOnError, params Payload[] payloads)
+        {
             if (!IsReady)
                 await Connect();
 
-            string dataFrame = _protocol.MakeDataFrame(payload);
+            string dataFrame = _protocol.MakeDataFrame(payloads);
             string encryptedPayload = EncryptDataFrame(dataFrame);
 
             try
@@ -336,7 +522,6 @@ namespace FrApp42.TPLink
                     .AddHeader("Referer", _url)
                     .AddHeader("Cookie", $"loginErrorShow=1; JSESSIONID={_sessionId}")
                     .AddHeader("TokenID", _tokenId)
-                    //.AddHeader("Content-Type", "text/plain")
                     .AddBody(encryptedPayload)
                     ;
 
@@ -347,17 +532,14 @@ namespace FrApp42.TPLink
                 Console.WriteLine(decryptedPayload);
 #endif
 
-                //Payload decodedPayload = _protocol.FromDataFrame(decryptedPayload);
-
-                //return _protocol.PrettifyResponsePayload(decodedPayload);
-                return _protocol.ExtendedFromDataFrame(decryptedPayload);
+                return _protocol.ParseResponse(decryptedPayload);
             }
             catch (Exception ex)
             {
-                if (ex.Message == HttpStatusCode.InternalServerError.ToString() && AllowReconnectionOnError)
+                if (ex.Message == HttpStatusCode.InternalServerError.ToString() && allowReconnectionOnError)
                 {
                     Reset();
-                    return await Execute(payload, false);
+                    return await ExecuteRaw(false, payloads);
                 }
                 else
                 {

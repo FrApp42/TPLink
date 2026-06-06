@@ -5,8 +5,9 @@
     <RootNamespace>FrApp42.TPLink</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <AssemblyVersion>1.0.0.122</AssemblyVersion>
-    <FileVersion>1.0.0.122</FileVersion>
+    <AssemblyVersion>1.1.0.0</AssemblyVersion>
+    <FileVersion>1.1.0.0</FileVersion>
+    <Version>1.1.0</Version>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     <PackageId>$(AssemblyName)</PackageId>
     <Title>TP-Link</Title>
@@ -17,7 +18,7 @@
     <PackageProjectUrl>https://github.com/FrApp42/TPLink</PackageProjectUrl>
     <RepositoryUrl>https://github.com/FrApp42/TPLink.git</RepositoryUrl>
     <PackageTags>TPLink;TP-Link;sms;Archer;MR600</PackageTags>
-    <PackageReleaseNotes>First release</PackageReleaseNotes>
+    <PackageReleaseNotes>Add typed SMS objects: SmsToSend (one or several recipients + message), and inbox/outbox reading (InboxSms, OutboxSms). New Client methods: SendAsync(SmsToSend), GetInboxAsync, GetUnreadAsync, GetOutboxAsync, MarkAsReadAsync, DeleteInboxAsync, DeleteOutboxAsync. Backward compatible.</PackageReleaseNotes>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageIcon>Icone Inversed.png</PackageIcon>
     <PackageLicenseFile>LICENSE.MD</PackageLicenseFile>
