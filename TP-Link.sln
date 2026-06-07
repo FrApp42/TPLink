@@ -9,6 +9,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TP-Link", "TP-Link\TP-Link.
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TP-Link.Test", "TP-Link.Test\TP-Link.Test.csproj", "{3D4BA412-24C2-4FB0-9D59-5FA3B3B38200}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TPLink.Gateway", "TPLink.Gateway\TPLink.Gateway.csproj", "{90A0C2DF-8C7F-4548-AB43-C7631701544D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -27,6 +29,10 @@ Global
 		{3D4BA412-24C2-4FB0-9D59-5FA3B3B38200}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{3D4BA412-24C2-4FB0-9D59-5FA3B3B38200}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{3D4BA412-24C2-4FB0-9D59-5FA3B3B38200}.Release|Any CPU.Build.0 = Release|Any CPU
+		{90A0C2DF-8C7F-4548-AB43-C7631701544D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{90A0C2DF-8C7F-4548-AB43-C7631701544D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{90A0C2DF-8C7F-4548-AB43-C7631701544D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{90A0C2DF-8C7F-4548-AB43-C7631701544D}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
